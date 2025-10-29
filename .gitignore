@@ -13,4 +13,4 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-.dummy_exercises/
+dummy_exercises/
