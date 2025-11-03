@@ -1,9 +1,9 @@
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import ToolNode
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage, SystemMessage
-from agents.graph.state import AgentState
-from agents.tools.tools import notion_tool
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
+from agent.graph.state import AgentState
+from agent.tools.tools import notion_tool
 
 load_dotenv() # TODO: modify .env loading
 
