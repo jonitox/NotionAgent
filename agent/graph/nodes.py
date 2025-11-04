@@ -1,11 +1,8 @@
-from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import ToolNode
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage, SystemMessage
-from agents.graph.state import AgentState
-from agents.tools.tools import notion_tool
-
-load_dotenv() # TODO: modify .env loading
+from agent.graph.state import AgentState
+from agent.tools.tools import notion_tool
 
 # TODO: enable model selection
 planner_model = ChatOpenAI(model="gpt-4o-mini").bind_tools([notion_tool]) # model for planning execution

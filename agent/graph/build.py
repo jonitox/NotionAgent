@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph, START, END
-from agents.graph.nodes import ingest_node, model_planner_node, route_planner, tool_node, model_answer_node
-from agents.graph.state import AgentState
+from agent.graph.nodes import ingest_node, model_planner_node, route_planner, tool_node, model_answer_node
+from agent.graph.state import AgentState
 
 def build_graph():
     graph = StateGraph(AgentState)
@@ -23,6 +23,5 @@ def build_graph():
     )
     graph.add_edge("tool", "answer")
     graph.add_edge("answer", END)
-
     
     return graph.compile()
