@@ -5,14 +5,12 @@ from agent.graph.state import AgentState
 def build_graph():
     graph = StateGraph(AgentState)
 
-    graph.add_node("ingest", ingest_node)
     graph.add_node("plan", model_planner_node)
     graph.add_node("tool", tool_node)
     graph.add_node("answer", model_answer_node)
     
     
-    graph.add_edge(START, "ingest")
-    graph.add_edge("ingest", "plan")
+    graph.add_edge(START, "plan")
     graph.add_conditional_edges(
         "plan",
         route_planner,
@@ -23,5 +21,7 @@ def build_graph():
     )
     graph.add_edge("tool", "answer")
     graph.add_edge("answer", END)
+
+    # TODO: Add Checkpointer
     
     return graph.compile()

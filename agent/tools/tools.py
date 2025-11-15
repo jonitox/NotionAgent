@@ -1,8 +1,9 @@
 from langchain_core.tools import tool
 from ..clients.notion_client import NotionClient
 from ..clients.exceptions import NotionError
+from config.settings import settings
 
-client = NotionClient()
+client = NotionClient(api_key=settings.NOTION_API_KEY)
 
 @tool
 def notion_tool() -> str:

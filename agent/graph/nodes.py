@@ -1,19 +1,21 @@
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import ToolNode
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
 from agent.graph.state import AgentState
 from agent.tools.tools import notion_tool
+from config.settings import settings
 
 # TODO: enable model selection
-planner_model = ChatOpenAI(model="gpt-4o-mini").bind_tools([notion_tool]) # model for planning execution
-answer_model = ChatOpenAI(model="gpt-4o").bind_tools([notion_tool]) # model for final answer generation
-MAX_TURNS = 10
+planner_model = ChatOpenAI(
+    model=settings.OPENAI_MODEL_PLANNER,
+    openai_api_key=settings.OPENAI_API_KEY
+).bind_tools([notion_tool])
+answer_model = ChatOpenAI(
+    model=settings.OPENAI_MODEL_ANSWER,
+    openai_api_key=settings.OPENAI_API_KEY
+).bind_tools([notion_tool])
 
-def ingest_node(state: AgentState) -> AgentState:
-    input_message = HumanMessage(content=input("Enter your message: "))
-    return {"messages": state["messages"] + [input_message]}
-
-def model_planner_node(state: AgentState) -> AgentState:
+def model_planner_node(state: AgentState) -> AgentState: 
     """Plan execution strategy based on user request."""    
     system_prompt = SystemMessage(content="""
     You are a planning agent. Analyze the user's request and decide ONLY whether to call tools.
@@ -56,7 +58,7 @@ def model_answer_node(state: AgentState) -> AgentState:
     response = answer_model.invoke([system_prompt] + state["messages"])
 
     pruned = [m for m in state["messages"] if not isinstance(m, ToolMessage)]
-    pruned = pruned[-MAX_TURNS*2:]
+    pruned = pruned[-settings.MAX_TURNS*2:]
 
     return {"messages": pruned + [response]}
 
