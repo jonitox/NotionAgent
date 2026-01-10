@@ -1,6 +1,8 @@
 from langgraph.graph import StateGraph, START, END
-from agent.graph.nodes import ingest_node, model_planner_node, route_planner, tool_node, model_answer_node
+from langgraph.checkpoint.sqlite import SqliteSaver
+from agent.graph.nodes import model_planner_node, route_planner, tool_node, model_answer_node
 from agent.graph.state import AgentState
+import sqlite3
 
 def build_graph():
     graph = StateGraph(AgentState)
@@ -21,7 +23,8 @@ def build_graph():
     )
     graph.add_edge("tool", "answer")
     graph.add_edge("answer", END)
-
-    # TODO: Add Checkpointer
     
-    return graph.compile()
+    conn = sqlite3.connect("checkpoints.db", check_same_thread=False)
+    checkpointer = SqliteSaver(conn)
+    
+    return graph.compile(checkpointer=checkpointer)
