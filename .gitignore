@@ -5,6 +5,10 @@ venv/
 *.env
 .env.*
 
+# SQLite databases
+*.db
+*.db-*
+
 .vscode/*
 
 .DS_Store

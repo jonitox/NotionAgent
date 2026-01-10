@@ -1,6 +1,7 @@
+from typing import List
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import ToolNode
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
+from langchain_core.messages import AIMessage, ToolMessage, SystemMessage, RemoveMessage
 from agent.graph.state import AgentState
 from agent.tools.tools import notion_tool
 from config.settings import settings
@@ -8,11 +9,11 @@ from config.settings import settings
 # TODO: enable model selection
 planner_model = ChatOpenAI(
     model=settings.OPENAI_MODEL_PLANNER,
-    openai_api_key=settings.OPENAI_API_KEY
+    api_key=settings.OPENAI_API_KEY
 ).bind_tools([notion_tool])
 answer_model = ChatOpenAI(
     model=settings.OPENAI_MODEL_ANSWER,
-    openai_api_key=settings.OPENAI_API_KEY
+    api_key=settings.OPENAI_API_KEY
 ).bind_tools([notion_tool])
 
 def model_planner_node(state: AgentState) -> AgentState: 
@@ -25,10 +26,10 @@ def model_planner_node(state: AgentState) -> AgentState:
     """)
     
     response = planner_model.invoke([system_prompt] + state["messages"])
-    
+
     if getattr(response, "tool_calls", None): 
-        return {"messages": state["messages"] + [response]}
-    return {"messages": state["messages"]}
+        return {"messages": [response]}
+    return {"messages": []}
 
 def route_planner(state: AgentState):
     """Route based on whether tools were called."""
@@ -36,6 +37,24 @@ def route_planner(state: AgentState):
     if isinstance(last_message, AIMessage) and getattr(last_message, "tool_calls", None):
         return "tool"
     return "answer"
+
+def clean_up(state: AgentState) -> List[str]:
+    """Collect message ids to drop: tool outputs, planner tool_calls, and old turns."""
+    removable_ids = []
+    
+    # Drop ToolMessage and planner AIMessage with tool_calls
+    for m in state["messages"]:
+        if isinstance(m, ToolMessage) or (isinstance(m, AIMessage) and getattr(m, "tool_calls", None)):
+            removable_ids.append(m.id)
+
+    # Keep only MAX_TURNS (Human + AI = 1 turn); subtract 1 to account for the response appended after cleanup.
+    keep_count = settings.MAX_TURNS * 2 - 1 
+    
+    remaining = [m for m in state["messages"] if m.id not in set(removable_ids)]
+    if len(remaining) > keep_count:
+        removable_ids.extend([m.id for m in remaining[: -(keep_count)]])
+
+    return removable_ids
 
 def model_answer_node(state: AgentState) -> AgentState:
     """Generate final user-facing response based on all available context."""
@@ -54,12 +73,10 @@ def model_answer_node(state: AgentState) -> AgentState:
         You are a helpful assistant. Provide a direct, informative, and engaging response
         to the user's question based on your knowledge and the conversation context.
         """)
-
     response = answer_model.invoke([system_prompt] + state["messages"])
-
-    pruned = [m for m in state["messages"] if not isinstance(m, ToolMessage)]
-    pruned = pruned[-settings.MAX_TURNS*2:]
-
-    return {"messages": pruned + [response]}
+    
+    remove_ids = clean_up(state)
+    
+    return {"messages": [RemoveMessage(id=i) for i in remove_ids] + [response]}
 
 tool_node = ToolNode([notion_tool])
