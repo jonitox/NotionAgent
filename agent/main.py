@@ -1,6 +1,3 @@
-from dotenv import load_dotenv
-load_dotenv()
-
 from agent.graph.build import build_graph
 from langchain_core.messages import AIMessage
 

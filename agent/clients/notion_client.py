@@ -1,4 +1,3 @@
-import os
 import requests
 from typing import Dict, Any, Optional
 from .exceptions import NotionError
@@ -6,10 +5,10 @@ from .exceptions import NotionError
 class NotionClient:
     """Notion API client for searching and retrieving page content."""
     
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv("NOTION_API_KEY")
+    def __init__(self, api_key: str):
+        self.api_key = api_key
         if not self.api_key:
-            raise ValueError("NOTION_API_KEY environment variable is required")
+            raise ValueError("API key is required")
 
         self.base_url = "https://api.notion.com/v1"
         self.headers = {
