@@ -4,7 +4,7 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.messages import AIMessage, ToolMessage, SystemMessage, RemoveMessage
 from agent.graph.state import AgentState
 from agent.tools.tools import notion_tool
-from config.settings import settings
+from agent.settings import settings
 
 # TODO: enable model selection
 planner_model = ChatOpenAI(
