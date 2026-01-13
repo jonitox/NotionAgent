@@ -1,10 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.v1 import health, chat
+from backend.api.v1 import health, chat, auth
+from backend.db.database import engine, Base
+
+# Initialize database tables
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title = "Notion Agent")
 
-# CORS 설정
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -17,3 +21,4 @@ prefix_v1 = "/api/v1"
 
 app.include_router(health.router, prefix=prefix_v1)
 app.include_router(chat.router, prefix=prefix_v1)
+app.include_router(auth.router, prefix=prefix_v1)
