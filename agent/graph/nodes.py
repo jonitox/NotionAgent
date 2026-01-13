@@ -1,20 +1,17 @@
 from typing import List
+from functools import lru_cache
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import ToolNode
 from langchain_core.messages import AIMessage, ToolMessage, SystemMessage, RemoveMessage
 from agent.graph.state import AgentState
-from agent.tools.tools import notion_tool
+from agent.tools.tools import create_notion_tool
 from agent.settings import settings
 
-# TODO: enable model selection
-planner_model = ChatOpenAI(
-    model=settings.OPENAI_MODEL_PLANNER,
-    api_key=settings.OPENAI_API_KEY
-).bind_tools([notion_tool])
-answer_model = ChatOpenAI(
-    model=settings.OPENAI_MODEL_ANSWER,
-    api_key=settings.OPENAI_API_KEY
-).bind_tools([notion_tool])
+
+@lru_cache(maxsize=128)
+def get_llm(api_key: str, model: str):
+    """Get or create cached ChatOpenAI instance."""
+    return ChatOpenAI(model=model, api_key=api_key)
 
 def model_planner_node(state: AgentState) -> AgentState: 
     """Plan execution strategy based on user request."""    
@@ -24,6 +21,11 @@ def model_planner_node(state: AgentState) -> AgentState:
     - If a Notion lookup is needed, RETURN a tool call.
     - If not, DO NOT answer; produce no content.
     """)
+    
+    api_key = state.get("openai_api_key")
+    if not api_key:
+        raise ValueError("OpenAI API key not configured in user settings")
+    planner_model = get_llm(api_key, settings.OPENAI_MODEL_PLANNER).bind_tools([create_notion_tool(state)]) ## TODO: enable model selection
     
     response = planner_model.invoke([system_prompt] + state["messages"])
 
@@ -73,10 +75,19 @@ def model_answer_node(state: AgentState) -> AgentState:
         You are a helpful assistant. Provide a direct, informative, and engaging response
         to the user's question based on your knowledge and the conversation context.
         """)
+
+    api_key = state.get("openai_api_key")
+    if not api_key:
+        raise ValueError("OpenAI API key not configured in user settings")
+    answer_model = get_llm(api_key, settings.OPENAI_MODEL_ANSWER).bind_tools([create_notion_tool(state)]) ## TODO: enable model selection
+    
     response = answer_model.invoke([system_prompt] + state["messages"])
     
     remove_ids = clean_up(state)
     
     return {"messages": [RemoveMessage(id=i) for i in remove_ids] + [response]}
 
-tool_node = ToolNode([notion_tool])
+def tool_node(state: AgentState) -> AgentState:
+    """Execute tools and return updated state."""
+    tool_node_instance = ToolNode([create_notion_tool(state)])
+    return tool_node_instance.invoke(state)
