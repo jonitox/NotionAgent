@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
-from backend.core.deps import get_agent_graph, get_current_user
-from backend.db.models import User
+from backend.core.deps import get_agent_graph, get_current_user, get_db
+from backend.db.models import User, UserSettings
+from sqlalchemy.orm import Session
 import traceback
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -27,13 +28,18 @@ def chat(
     request: ChatRequest,
     graph = Depends(get_agent_graph),
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     try:
+        settings = db.query(UserSettings).filter(UserSettings.user_id == current_user.id).first()
+        
         state = {
-            "messages": [HumanMessage(content=request.message)]
+            "messages": [HumanMessage(content=request.message)],
+            "openai_api_key": settings.openai_api_key if settings else None,
+            "notion_api_key": settings.notion_api_key if settings else None,
+            "notion_page_id": settings.notion_page_id if settings else None,
         }
         
-        # Namespace thread_id per user to avoid cross-user collisions
         namespaced_thread_id = f"{current_user.id}:{request.thread_id}"
         config = {"configurable": {"thread_id": namespaced_thread_id}}
         result = graph.invoke(state, config)
