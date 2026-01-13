@@ -1,19 +1,19 @@
+from typing import List
+from functools import lru_cache
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import ToolNode
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage, SystemMessage
+from langchain_core.messages import AIMessage, ToolMessage, SystemMessage, RemoveMessage
 from agent.graph.state import AgentState
-from agent.tools.tools import notion_tool
+from agent.tools.tools import create_notion_tool
+from agent.settings import settings
 
-# TODO: enable model selection
-planner_model = ChatOpenAI(model="gpt-4o-mini").bind_tools([notion_tool]) # model for planning execution
-answer_model = ChatOpenAI(model="gpt-4o").bind_tools([notion_tool]) # model for final answer generation
-MAX_TURNS = 10
 
-def ingest_node(state: AgentState) -> AgentState:
-    input_message = HumanMessage(content=input("Enter your message: "))
-    return {"messages": state["messages"] + [input_message]}
+@lru_cache(maxsize=128)
+def get_llm(api_key: str, model: str):
+    """Get or create cached ChatOpenAI instance."""
+    return ChatOpenAI(model=model, api_key=api_key)
 
-def model_planner_node(state: AgentState) -> AgentState:
+def model_planner_node(state: AgentState) -> AgentState: 
     """Plan execution strategy based on user request."""    
     system_prompt = SystemMessage(content="""
     You are a planning agent. Analyze the user's request and decide ONLY whether to call tools.
@@ -22,11 +22,16 @@ def model_planner_node(state: AgentState) -> AgentState:
     - If not, DO NOT answer; produce no content.
     """)
     
-    response = planner_model.invoke([system_prompt] + state["messages"])
+    api_key = state.get("openai_api_key")
+    if not api_key:
+        raise ValueError("OpenAI API key not configured in user settings")
+    planner_model = get_llm(api_key, settings.OPENAI_MODEL_PLANNER).bind_tools([create_notion_tool(state)]) ## TODO: enable model selection
     
+    response = planner_model.invoke([system_prompt] + state["messages"])
+
     if getattr(response, "tool_calls", None): 
-        return {"messages": state["messages"] + [response]}
-    return {"messages": state["messages"]}
+        return {"messages": [response]}
+    return {"messages": []}
 
 def route_planner(state: AgentState):
     """Route based on whether tools were called."""
@@ -34,6 +39,24 @@ def route_planner(state: AgentState):
     if isinstance(last_message, AIMessage) and getattr(last_message, "tool_calls", None):
         return "tool"
     return "answer"
+
+def clean_up(state: AgentState) -> List[str]:
+    """Collect message ids to drop: tool outputs, planner tool_calls, and old turns."""
+    removable_ids = []
+    
+    # Drop ToolMessage and planner AIMessage with tool_calls
+    for m in state["messages"]:
+        if isinstance(m, ToolMessage) or (isinstance(m, AIMessage) and getattr(m, "tool_calls", None)):
+            removable_ids.append(m.id)
+
+    # Keep only MAX_TURNS (Human + AI = 1 turn); subtract 1 to account for the response appended after cleanup.
+    keep_count = settings.MAX_TURNS * 2 - 1 
+    
+    remaining = [m for m in state["messages"] if m.id not in set(removable_ids)]
+    if len(remaining) > keep_count:
+        removable_ids.extend([m.id for m in remaining[: -(keep_count)]])
+
+    return removable_ids
 
 def model_answer_node(state: AgentState) -> AgentState:
     """Generate final user-facing response based on all available context."""
@@ -53,11 +76,18 @@ def model_answer_node(state: AgentState) -> AgentState:
         to the user's question based on your knowledge and the conversation context.
         """)
 
+    api_key = state.get("openai_api_key")
+    if not api_key:
+        raise ValueError("OpenAI API key not configured in user settings")
+    answer_model = get_llm(api_key, settings.OPENAI_MODEL_ANSWER).bind_tools([create_notion_tool(state)]) ## TODO: enable model selection
+    
     response = answer_model.invoke([system_prompt] + state["messages"])
+    
+    remove_ids = clean_up(state)
+    
+    return {"messages": [RemoveMessage(id=i) for i in remove_ids] + [response]}
 
-    pruned = [m for m in state["messages"] if not isinstance(m, ToolMessage)]
-    pruned = pruned[-MAX_TURNS*2:]
-
-    return {"messages": pruned + [response]}
-
-tool_node = ToolNode([notion_tool])
+def tool_node(state: AgentState) -> AgentState:
+    """Execute tools and return updated state."""
+    tool_node_instance = ToolNode([create_notion_tool(state)])
+    return tool_node_instance.invoke(state)
