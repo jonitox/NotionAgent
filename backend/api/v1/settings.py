@@ -25,7 +25,7 @@ class UserSettingsResponse(BaseModel):
 
 
 @router.post("/", response_model=UserSettingsResponse, status_code=status.HTTP_200_OK)
-def upsert_settings(
+def upsert(
     request: UserSettingsRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -49,7 +49,7 @@ def upsert_settings(
 
 
 @router.get("/", response_model=UserSettingsResponse, status_code=status.HTTP_200_OK)
-def get_settings(
+def get(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
